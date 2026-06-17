@@ -330,6 +330,7 @@ function parseCompanyResponse(cin, payload) {
   const normalizedPayload = normalizeResponseTree(payload);
   const companyData = unwrapPayload(normalizedPayload);
   const rawText = typeof normalizedPayload === "string" ? normalizedPayload : "";
+  const responseStatus = extractResponseStatus(normalizedPayload);
   const companyName = deepGet(companyData, [
     ["companyName"],
     ["name"],
@@ -408,10 +409,37 @@ function parseCompanyResponse(cin, payload) {
     !result["Contact Person"] &&
     !result["Contact Details"]
   ) {
-    result["Enrichment Status"] = "Completed - no mapped fields found";
+    result["Enrichment Status"] = responseStatus
+      ? "No company data returned"
+      : "Completed - no mapped fields found";
+    result.Error = responseStatus;
   }
 
   return result;
+}
+
+function extractResponseStatus(payload) {
+  const response = firstByNormalizedKey(payload, ["Response", "StatusResponse", "Result", "Data"]) || payload;
+  if (!response || typeof response !== "object" || Array.isArray(response)) return "";
+
+  const parts = [];
+  for (const key of [
+    "Status",
+    "Type",
+    "Message",
+    "Error",
+    "ErrorMessage",
+    "Remarks",
+    "Description",
+    "Reason",
+  ]) {
+    const value = firstByNormalizedKey(response, [key]);
+    if (value !== undefined && value !== null && value !== "" && typeof value !== "object") {
+      parts.push(`${key}: ${value}`);
+    }
+  }
+
+  return parts.join(" | ");
 }
 
 function summarizeResponse(payload) {
@@ -425,8 +453,14 @@ function summarizeResponse(payload) {
     reportKeys && typeof reportKeys === "object" && !Array.isArray(reportKeys)
       ? Object.keys(reportKeys).slice(0, 12).join(", ")
       : "";
+  const responseStatus = extractResponseStatus(normalized);
 
-  return nestedKeys ? `Top keys: ${topKeys} | Nested keys: ${nestedKeys}` : `Top keys: ${topKeys}`;
+  return [
+    nestedKeys ? `Top keys: ${topKeys} | Nested keys: ${nestedKeys}` : `Top keys: ${topKeys}`,
+    responseStatus,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }
 
 async function callInstaBasic(cin) {
