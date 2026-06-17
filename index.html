@@ -31,6 +31,14 @@
             value="https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All"
           />
 
+          <label for="authHeaderMode">Auth header</label>
+          <select id="authHeaderMode">
+            <option value="react-access-key">react-access-key</option>
+            <option value="authorization">Authorization</option>
+            <option value="bearer">Authorization: Bearer</option>
+            <option value="x-api-key">X-API-Key</option>
+          </select>
+
           <div class="two-col">
             <div>
               <label for="httpMethod">Method</label>

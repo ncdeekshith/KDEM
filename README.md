@@ -10,6 +10,7 @@ This version is designed for GitHub Pages. It does not need Python, Streamlit, N
 - Paste CIN/FCIN values manually.
 - Auto-detect a `CIN` or `FCIN` column.
 - Call InstaFinancials InstaBasic with a configurable endpoint and delay.
+- Select the authentication header format expected by your InstaFinancials account.
 - Preview enriched data in the browser.
 - Download enriched data as CSV or XLSX.
 - Save enrichment runs to Firebase Firestore.
@@ -85,3 +86,5 @@ https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All
 ```
 
 If your account uses a different endpoint, update it in the sidebar. The app supports `{cin}` and `{fcin}` placeholders.
+
+The default auth header is `react-access-key`, which appears in InstaFinancials public API examples. If your account documentation specifies another format, change **Auth header** in the sidebar.

@@ -13,6 +13,7 @@ import {
 const els = {
   apiKey: document.querySelector("#apiKey"),
   endpointTemplate: document.querySelector("#endpointTemplate"),
+  authHeaderMode: document.querySelector("#authHeaderMode"),
   httpMethod: document.querySelector("#httpMethod"),
   delaySeconds: document.querySelector("#delaySeconds"),
   firebaseConfig: document.querySelector("#firebaseConfig"),
@@ -167,6 +168,7 @@ async function callInstaBasic(cin) {
   const apiKey = els.apiKey.value.trim();
   const endpointTemplate = els.endpointTemplate.value.trim();
   const method = els.httpMethod.value;
+  const authHeaderMode = els.authHeaderMode.value;
   const requestUrl = endpointTemplate.replaceAll("{cin}", encodeURIComponent(cin)).replaceAll(
     "{fcin}",
     encodeURIComponent(cin),
@@ -174,14 +176,18 @@ async function callInstaBasic(cin) {
   const usesTemplate = requestUrl !== endpointTemplate;
   const url = new URL(requestUrl);
 
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  if (authHeaderMode === "react-access-key") headers["react-access-key"] = apiKey;
+  if (authHeaderMode === "authorization") headers.Authorization = apiKey;
+  if (authHeaderMode === "bearer") headers.Authorization = `Bearer ${apiKey}`;
+  if (authHeaderMode === "x-api-key") headers["X-API-Key"] = apiKey;
+
   const request = {
     method,
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: apiKey,
-      "X-API-Key": apiKey,
-    },
+    headers,
   };
 
   if (method === "GET" && !usesTemplate) {
