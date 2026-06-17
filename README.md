@@ -87,4 +87,4 @@ https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All
 
 If your account uses a different endpoint, update it in the sidebar. The app supports `{cin}` and `{fcin}` placeholders.
 
-The default auth header is `react-access-key`, which appears in InstaFinancials public API examples. If your account documentation specifies another format, change **Auth header** in the sidebar.
+The default auth header is `user-key`, which the InstaFinancials docs describe as the header key for a user's public API key. If your account documentation specifies another format, change **Auth header** in the sidebar.

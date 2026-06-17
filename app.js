@@ -181,6 +181,7 @@ async function callInstaBasic(cin) {
     "Content-Type": "application/json",
   };
   if (authHeaderMode === "react-access-key") headers["react-access-key"] = apiKey;
+  if (authHeaderMode === "user-key") headers["user-key"] = apiKey;
   if (authHeaderMode === "authorization") headers.Authorization = apiKey;
   if (authHeaderMode === "bearer") headers.Authorization = `Bearer ${apiKey}`;
   if (authHeaderMode === "x-api-key") headers["X-API-Key"] = apiKey;
