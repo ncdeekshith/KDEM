@@ -434,12 +434,24 @@ function extractResponseStatus(payload) {
     "Reason",
   ]) {
     const value = firstByNormalizedKey(response, [key]);
-    if (value !== undefined && value !== null && value !== "" && typeof value !== "object") {
-      parts.push(`${key}: ${value}`);
+    const displayValue = compactDebugValue(value);
+    if (displayValue) {
+      parts.push(`${key}: ${displayValue}`);
     }
   }
 
   return parts.join(" | ");
+}
+
+function compactDebugValue(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value !== "object") return String(value);
+
+  try {
+    return JSON.stringify(value).slice(0, 400);
+  } catch {
+    return String(value);
+  }
 }
 
 function summarizeResponse(payload) {
@@ -454,10 +466,12 @@ function summarizeResponse(payload) {
       ? Object.keys(reportKeys).slice(0, 12).join(", ")
       : "";
   const responseStatus = extractResponseStatus(normalized);
+  const responsePreview = reportKeys ? compactDebugValue(reportKeys) : "";
 
   return [
     nestedKeys ? `Top keys: ${topKeys} | Nested keys: ${nestedKeys}` : `Top keys: ${topKeys}`,
     responseStatus,
+    responsePreview ? `Preview: ${responsePreview}` : "",
   ]
     .filter(Boolean)
     .join(" | ");
