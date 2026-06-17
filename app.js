@@ -12,6 +12,7 @@ import {
 
 const els = {
   apiKey: document.querySelector("#apiKey"),
+  endpointPreset: document.querySelector("#endpointPreset"),
   endpointTemplate: document.querySelector("#endpointTemplate"),
   authHeaderMode: document.querySelector("#authHeaderMode"),
   httpMethod: document.querySelector("#httpMethod"),
@@ -178,7 +179,6 @@ async function callInstaBasic(cin) {
 
   const headers = {
     Accept: "application/json",
-    "Content-Type": "application/json",
   };
   if (authHeaderMode === "react-access-key") headers["react-access-key"] = apiKey;
   if (authHeaderMode === "user-key") headers["user-key"] = apiKey;
@@ -197,6 +197,7 @@ async function callInstaBasic(cin) {
   }
 
   if (method === "POST") {
+    headers["Content-Type"] = "application/json";
     request.body = usesTemplate ? "{}" : JSON.stringify({ cin, fcin: cin });
   }
 
@@ -469,6 +470,9 @@ function init() {
 
   wireFileDrop();
   els.startEnrichment.addEventListener("click", startEnrichment);
+  els.endpointPreset.addEventListener("change", () => {
+    els.endpointTemplate.value = els.endpointPreset.value;
+  });
   els.downloadCsv.addEventListener("click", downloadCsv);
   els.downloadXlsx.addEventListener("click", downloadXlsx);
   els.connectFirebase.addEventListener("click", connectFirebase);

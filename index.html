@@ -25,10 +25,18 @@
           <input id="apiKey" type="password" autocomplete="off" placeholder="Enter API key for this session" />
 
           <label for="endpointTemplate">Endpoint template</label>
+          <select id="endpointPreset">
+            <option value="https://instafinancials.com/api/InstaBasic/v1/json/CompanyCIN/{cin}/All">
+              Public JSON InstaBasic endpoint
+            </option>
+            <option value="https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All">
+              InstaReports endpoint
+            </option>
+          </select>
           <input
             id="endpointTemplate"
             type="text"
-            value="https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All"
+            value="https://instafinancials.com/api/InstaBasic/v1/json/CompanyCIN/{cin}/All"
           />
 
           <label for="authHeaderMode">Auth header</label>

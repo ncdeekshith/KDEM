@@ -79,12 +79,12 @@ http://localhost:8080
 
 ## InstaFinancials Endpoint
 
-The default endpoint template is:
+The default endpoint template is the public JSON InstaBasic URL shown in InstaFinancials examples:
 
 ```text
-https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All
+https://instafinancials.com/api/InstaBasic/v1/json/CompanyCIN/{cin}/All
 ```
 
-If your account uses a different endpoint, update it in the sidebar. The app supports `{cin}` and `{fcin}` placeholders.
+If your account uses a different endpoint, update it in the sidebar. The app supports `{cin}` and `{fcin}` placeholders, and also includes the `api.instafinancials.com/InstaReports/...` endpoint as a preset.
 
 The default auth header is `user-key`, which the InstaFinancials docs describe as the header key for a user's public API key. If your account documentation specifies another format, change **Auth header** in the sidebar.
