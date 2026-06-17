@@ -416,9 +416,11 @@ function parseCompanyResponse(cin, payload) {
     !result["Contact Person"] &&
     !result["Contact Details"]
   ) {
-    result["Enrichment Status"] = responseStatus
-      ? "No company data returned"
-      : "Completed - no mapped fields found";
+    result["Enrichment Status"] = isUnauthenticatedResponse(responseStatus)
+      ? "Failed - API key not verified"
+      : responseStatus
+        ? "No company data returned"
+        : "Completed - no mapped fields found";
     result.Error = responseStatus;
   }
 
@@ -448,6 +450,10 @@ function extractResponseStatus(payload) {
   }
 
   return parts.join(" | ");
+}
+
+function isUnauthenticatedResponse(statusText) {
+  return /unauthenticated|unauthorized|key could not be verified|api key/i.test(statusText || "");
 }
 
 function compactDebugValue(value) {
