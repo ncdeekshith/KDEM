@@ -16,6 +16,23 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## Deploy
+
+### Streamlit Community Cloud
+
+1. Open Streamlit Community Cloud.
+2. Create a new app from `ncdeekshith/KDEM`.
+3. Set the main file path to `app.py`.
+4. Deploy.
+
+### Render
+
+This repository includes `render.yaml`. Create a new Render Blueprint from this GitHub repository and Render will use:
+
+```bash
+streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+```
+
 ## Notes
 
 - Upload `.csv` or `.xlsx` files, or paste CIN/FCIN values manually.
