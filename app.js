@@ -89,6 +89,59 @@ function parseJsonMaybe(value) {
   return current;
 }
 
+function normalizeResponseTree(value) {
+  const parsed = parseJsonMaybe(value);
+
+  if (Array.isArray(parsed)) {
+    return parsed.map((item) => normalizeResponseTree(item));
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return parsed;
+  }
+
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, child]) => [key, normalizeResponseTree(child)]),
+  );
+}
+
+function xmlTagValue(xmlText, candidateTags) {
+  if (typeof xmlText !== "string" || !xmlText.trim().startsWith("<")) return "";
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "application/xml");
+  if (xml.querySelector("parsererror")) return "";
+
+  for (const tag of candidateTags) {
+    const element = xml.querySelector(tag);
+    const value = element?.textContent?.trim();
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function xmlTagValues(xmlText, candidateTags) {
+  if (typeof xmlText !== "string" || !xmlText.trim().startsWith("<")) return [];
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "application/xml");
+  if (xml.querySelector("parsererror")) return [];
+
+  const values = [];
+  for (const tag of candidateTags) {
+    for (const element of xml.querySelectorAll(tag)) {
+      const value = element.textContent?.trim();
+      if (value) values.push(value);
+    }
+  }
+  return [...new Set(values)];
+}
+
+function firstByNormalizedKey(data, candidateKeys) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+  const normalizedCandidates = new Set(candidateKeys.map(normalizeKeyName));
+  return Object.entries(data).find(([key]) => normalizedCandidates.has(normalizeKeyName(key)))?.[1];
+}
+
 function findFirstValue(data, candidateKeys) {
   const normalizedCandidates = new Set(candidateKeys.map(normalizeKeyName));
   const queue = [data];
@@ -169,14 +222,29 @@ function collectObjectsWithNameKeys(data, candidateNameKeys) {
 }
 
 function unwrapPayload(payload) {
-  payload = parseJsonMaybe(payload);
-  if (!payload || typeof payload !== "object") return {};
-  for (const key of ["data", "result", "company", "companyData", "masterData", "response"]) {
-    if (payload[key] && typeof payload[key] === "object" && !Array.isArray(payload[key])) {
-      return payload[key];
+  payload = normalizeResponseTree(payload);
+  if (!payload || typeof payload !== "object") return payload;
+
+  let current = payload;
+  for (let depth = 0; depth < 5; depth += 1) {
+    const next = firstByNormalizedKey(current, [
+      "data",
+      "result",
+      "company",
+      "companyData",
+      "masterData",
+      "response",
+      "reportData",
+      "DirectorList",
+    ]);
+    if (next && typeof next === "object" && !Array.isArray(next)) {
+      current = next;
+    } else {
+      break;
     }
   }
-  return payload;
+
+  return current;
 }
 
 function parseDirectors(companyData) {
@@ -259,14 +327,17 @@ function parseContactDetails(companyData) {
 }
 
 function parseCompanyResponse(cin, payload) {
-  const companyData = unwrapPayload(payload);
+  const normalizedPayload = normalizeResponseTree(payload);
+  const companyData = unwrapPayload(normalizedPayload);
+  const rawText = typeof normalizedPayload === "string" ? normalizedPayload : "";
   const companyName = deepGet(companyData, [
     ["companyName"],
     ["name"],
     ["masterData", "companyName"],
     ["companyMasterData", "companyName"],
     ["basicDetails", "companyName"],
-  ]) || findFirstValue(companyData, ["CompanyName", "EntityName", "LegalName"]);
+  ]) || findFirstValue(companyData, ["CompanyName", "EntityName", "LegalName"])
+    || xmlTagValue(rawText, ["CompanyName", "EntityName", "LegalName"]);
   const registeredAddress = deepGet(companyData, [
     ["registeredAddress"],
     ["registeredOfficeAddress"],
@@ -275,6 +346,12 @@ function parseCompanyResponse(cin, payload) {
     ["companyMasterData", "registeredAddress"],
     ["basicDetails", "registeredAddress"],
   ]) || findFirstValue(companyData, [
+    "CompanyFullAddress",
+    "RegisteredAddress",
+    "CompanyAddress",
+    "Address",
+    "PrincipalPlaceofBusiness",
+  ]) || xmlTagValue(rawText, [
     "CompanyFullAddress",
     "RegisteredAddress",
     "CompanyAddress",
@@ -296,17 +373,32 @@ function parseCompanyResponse(cin, payload) {
     "McaIndustry",
     "ActivityDescription",
     "PrincipalBusinessActivity",
+  ]) || xmlTagValue(rawText, [
+    "CompanyMcaIndustry",
+    "CompanyMcaIndustryDivision",
+    "Industry",
+    "McaIndustry",
+    "ActivityDescription",
+    "PrincipalBusinessActivity",
   ]);
+  const contactPerson =
+    parseDirectors(companyData) || xmlTagValues(rawText, ["DirectorName", "ContactPerson", "SignatoryName"]).join(", ");
+  const contactDetails = parseContactDetails(companyData) || [
+    xmlTagValue(rawText, ["CompanyEmail", "EmailID", "Email", "RegisteredEmail"]),
+    xmlTagValue(rawText, ["ContactNo", "ContactNumber", "MobileNumber", "PhoneNumber"]),
+    xmlTagValue(rawText, ["CompanyWebSite", "CompanyWebsite", "Website", "WebSite"]),
+  ].filter(Boolean).join(" | ");
 
   const result = {
     CIN: cin,
     "Company Name": String(companyName || "").trim(),
     "Company Address": String(registeredAddress || "").trim(),
     Sector: String(industrySector || "").trim(),
-    "Contact Person": parseDirectors(companyData),
-    "Contact Details": parseContactDetails(companyData),
+    "Contact Person": contactPerson,
+    "Contact Details": contactDetails,
     "Enrichment Status": "Success",
     Error: "",
+    "Debug Response": summarizeResponse(normalizedPayload),
   };
 
   if (
@@ -320,6 +412,21 @@ function parseCompanyResponse(cin, payload) {
   }
 
   return result;
+}
+
+function summarizeResponse(payload) {
+  const normalized = normalizeResponseTree(payload);
+  if (typeof normalized === "string") return normalized.slice(0, 500);
+  if (!normalized || typeof normalized !== "object") return String(normalized ?? "");
+
+  const topKeys = Object.keys(normalized).slice(0, 12).join(", ");
+  const reportKeys = firstByNormalizedKey(normalized, ["ReportData", "Response", "Data"]);
+  const nestedKeys =
+    reportKeys && typeof reportKeys === "object" && !Array.isArray(reportKeys)
+      ? Object.keys(reportKeys).slice(0, 12).join(", ")
+      : "";
+
+  return nestedKeys ? `Top keys: ${topKeys} | Nested keys: ${nestedKeys}` : `Top keys: ${topKeys}`;
 }
 
 async function callInstaBasic(cin) {
@@ -373,6 +480,7 @@ async function callInstaBasic(cin) {
       "Contact Details": "",
       "Enrichment Status": "Failed",
       Error: error.message,
+      "Debug Response": "",
     };
   }
 }
@@ -409,6 +517,7 @@ function renderTable(rows) {
           <td>${escapeHtml(row.Sector || "")}</td>
           <td>${escapeHtml(row["Enrichment Status"] || "")}</td>
           <td class="${row.Error ? "error" : ""}">${escapeHtml(row.Error || "")}</td>
+          <td>${escapeHtml(row["Debug Response"] || "")}</td>
         </tr>
       `,
     )
