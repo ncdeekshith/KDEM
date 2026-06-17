@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KDEM B2B Data Enrichment</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="Configuration">
+        <div class="brand">
+          <span class="brand-mark">K</span>
+          <div>
+            <h1>KDEM Enrichment</h1>
+            <p>CIN/FCIN enrichment with Firebase history</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <h2>InstaFinancials</h2>
+          <label for="apiKey">API key</label>
+          <input id="apiKey" type="password" autocomplete="off" placeholder="Enter API key for this session" />
+
+          <label for="endpointTemplate">Endpoint template</label>
+          <input
+            id="endpointTemplate"
+            type="text"
+            value="https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All"
+          />
+
+          <div class="two-col">
+            <div>
+              <label for="httpMethod">Method</label>
+              <select id="httpMethod">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+              </select>
+            </div>
+            <div>
+              <label for="delaySeconds">Delay</label>
+              <input id="delaySeconds" type="number" min="0" max="60" step="0.5" value="1" />
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Firebase</h2>
+          <label for="firebaseConfig">Firebase web config JSON</label>
+          <textarea id="firebaseConfig" rows="8" spellcheck="false" placeholder='{"apiKey":"...","authDomain":"...","projectId":"..."}'></textarea>
+          <button id="connectFirebase" type="button">Connect Firebase</button>
+          <p id="firebaseStatus" class="status-text">Not connected</p>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="toolbar">
+          <div>
+            <h2>Company Data Enrichment</h2>
+            <p>Upload a file or paste CINs manually. Completed runs can be saved to Firestore.</p>
+          </div>
+          <div class="toolbar-actions">
+            <button id="startEnrichment" type="button" class="primary">Start Enrichment</button>
+            <button id="saveRun" type="button" disabled>Save to Firebase</button>
+          </div>
+        </header>
+
+        <section class="input-grid">
+          <div class="drop-zone" id="dropZone">
+            <input id="fileInput" type="file" accept=".csv,.xlsx" />
+            <strong>Drop CSV/XLSX here</strong>
+            <span>or click to choose a file with a CIN or FCIN column</span>
+            <p id="fileName">No file selected</p>
+          </div>
+
+          <div class="manual-entry">
+            <label for="manualCins">Manual CIN/FCIN input</label>
+            <textarea id="manualCins" rows="9" placeholder="U12345MH2020PLC123456&#10;L32309KA1954GOI000787"></textarea>
+          </div>
+        </section>
+
+        <section class="run-card">
+          <div class="run-meta">
+            <p id="runStatus">Ready</p>
+            <span id="recordCount">0 records</span>
+          </div>
+          <progress id="progressBar" value="0" max="100"></progress>
+        </section>
+
+        <section class="table-section">
+          <div class="section-head">
+            <h2>Preview</h2>
+            <div class="download-actions">
+              <button id="downloadCsv" type="button" disabled>Download CSV</button>
+              <button id="downloadXlsx" type="button" disabled>Download XLSX</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="previewTable">
+              <thead>
+                <tr>
+                  <th>CIN</th>
+                  <th>Company Name</th>
+                  <th>Registered Address</th>
+                  <th>Industry/Sector</th>
+                  <th>Director Names</th>
+                  <th>Status</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="history-section">
+          <div class="section-head">
+            <h2>Firebase Run History</h2>
+            <button id="loadRuns" type="button">Load Runs</button>
+          </div>
+          <div id="runHistory" class="history-list"></div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,44 +1,87 @@
-# B2B Data Enrichment Tool
+# KDEM B2B Data Enrichment Tool
 
-Lightweight Streamlit app for enriching Indian company CIN/FCIN data through the InstaFinancials InstaBasic API.
+Static web app for enriching Indian company CIN/FCIN records through the InstaFinancials InstaBasic API and saving completed runs to Firebase Firestore.
 
-## Install
+This version is designed for GitHub Pages. It does not need Python, Streamlit, Node, or a build step.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+## Features
+
+- Upload `.csv` or `.xlsx` files.
+- Paste CIN/FCIN values manually.
+- Auto-detect a `CIN` or `FCIN` column.
+- Call InstaFinancials InstaBasic with a configurable endpoint and delay.
+- Preview enriched data in the browser.
+- Download enriched data as CSV or XLSX.
+- Save enrichment runs to Firebase Firestore.
+- Load recent saved runs from Firestore.
+
+## GitHub Pages Deployment
+
+The app is a static site that can be served directly from the repository root.
+
+To enable GitHub Pages:
+
+1. Open the repository on GitHub.
+2. Go to **Settings** → **Pages**.
+3. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
+4. Select branch `main` and folder `/ (root)`.
+5. Save.
+
+The site will be available at:
+
+```text
+https://ncdeekshith.github.io/KDEM/
 ```
 
-## Run
+## Firebase Setup
 
-```bash
-streamlit run app.py
+1. Create a Firebase project.
+2. Add a Web App in Firebase project settings.
+3. Copy the Firebase config object.
+4. Enable Firestore Database.
+5. Open the deployed app and paste the Firebase config JSON in the sidebar.
+
+Example config shape:
+
+```json
+{
+  "apiKey": "YOUR_FIREBASE_WEB_API_KEY",
+  "authDomain": "YOUR_PROJECT.firebaseapp.com",
+  "projectId": "YOUR_PROJECT_ID",
+  "storageBucket": "YOUR_PROJECT.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abcdef"
+}
 ```
 
-## Deploy
+For quick testing, Firestore rules can temporarily allow writes from your app. For production, restrict access with Firebase Authentication and rules that match your user model.
 
-### Streamlit Community Cloud
+## Important Security Note
 
-1. Open Streamlit Community Cloud.
-2. Create a new app from `ncdeekshith/KDEM`.
-3. Set the main file path to `app.py`.
-4. Deploy.
+GitHub Pages is static hosting. Static browser apps cannot keep the InstaFinancials API key secret, because every request runs from the user's browser.
 
-### Render
+This app keeps the InstaFinancials key out of GitHub by asking for it at runtime, but the key is still visible to the browser session and network inspector. For a stricter production deployment, put a Firebase Cloud Function or another backend proxy in front of InstaFinancials, store the InstaFinancials key as a server-side secret, and have this app call that proxy instead.
 
-This repository includes `render.yaml`. Create a new Render Blueprint from this GitHub repository and Render will use:
+## Local Preview
+
+Serve the folder locally:
 
 ```bash
-streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+python3 -m http.server 8080
 ```
 
-## Notes
+Then visit:
 
-- Upload `.csv` or `.xlsx` files, or paste CIN/FCIN values manually.
-- The app automatically detects a column named `CIN`, `FCIN`, or a close case-insensitive equivalent.
-- Use the sidebar to enter your API key and delay between requests.
-- The default endpoint follows the public InstaFinancials docs example format:
-  `https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All`.
-- Use **Advanced API settings** if your InstaFinancials account uses a different InstaBasic endpoint or request method.
-- Failed CIN/FCIN lookups are captured in `Enrichment Status` and `Error` columns without stopping the batch.
+```text
+http://localhost:8080
+```
+
+## InstaFinancials Endpoint
+
+The default endpoint template is:
+
+```text
+https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All
+```
+
+If your account uses a different endpoint, update it in the sidebar. The app supports `{cin}` and `{fcin}` placeholders.
