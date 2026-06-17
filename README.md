@@ -11,7 +11,7 @@ This version is designed for GitHub Pages. It does not need Python, Streamlit, N
 - Auto-detect a `CIN` or `FCIN` column.
 - Call InstaFinancials InstaBasic with a configurable endpoint and delay.
 - Select the authentication header format expected by your InstaFinancials account.
-- Preview enriched data in the browser.
+- Preview company name, contact details, contact person, company address, and sector in the browser.
 - Download enriched data as CSV or XLSX.
 - Save enrichment runs to Firebase Firestore.
 - Load recent saved runs from Firestore.

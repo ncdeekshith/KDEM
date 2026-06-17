@@ -70,7 +70,106 @@ function deepGet(data, paths) {
   return "";
 }
 
+function normalizeKeyName(key) {
+  return String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function parseJsonMaybe(value) {
+  let current = value;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (typeof current !== "string") return current;
+    const trimmed = current.trim();
+    if (!trimmed || !["{", "[", '"'].includes(trimmed[0])) return current;
+    try {
+      current = JSON.parse(trimmed);
+    } catch {
+      return current;
+    }
+  }
+  return current;
+}
+
+function findFirstValue(data, candidateKeys) {
+  const normalizedCandidates = new Set(candidateKeys.map(normalizeKeyName));
+  const queue = [data];
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    if (!current || typeof current !== "object") continue;
+
+    for (const [key, value] of Object.entries(current)) {
+      if (normalizedCandidates.has(normalizeKeyName(key)) && value !== null && value !== "") {
+        return value;
+      }
+    }
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === "object") queue.push(value);
+    }
+  }
+
+  return "";
+}
+
+function collectObjectsByAncestorAndKey(data, ancestorKey, targetKey) {
+  const matches = [];
+  const normalizedAncestor = normalizeKeyName(ancestorKey);
+  const normalizedTarget = normalizeKeyName(targetKey);
+
+  function visit(value, ancestors = []) {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, ancestors);
+      return;
+    }
+
+    if (!value || typeof value !== "object") return;
+
+    for (const [key, child] of Object.entries(value)) {
+      const nextAncestors = [...ancestors, normalizeKeyName(key)];
+      if (
+        normalizeKeyName(key) === normalizedTarget &&
+        Array.isArray(child) &&
+        ancestors.includes(normalizedAncestor)
+      ) {
+        matches.push(...child.filter((item) => item && typeof item === "object"));
+      }
+      visit(child, nextAncestors);
+    }
+  }
+
+  visit(data);
+  return matches;
+}
+
+function collectObjectsWithNameKeys(data, candidateNameKeys) {
+  const normalizedNameKeys = new Set(candidateNameKeys.map(normalizeKeyName));
+  const objects = [];
+
+  function visit(value) {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+
+    if (Object.keys(value).some((key) => normalizedNameKeys.has(normalizeKeyName(key)))) {
+      objects.push(value);
+    }
+
+    for (const child of Object.values(value)) visit(child);
+  }
+
+  visit(data);
+  return objects;
+}
+
 function unwrapPayload(payload) {
+  payload = parseJsonMaybe(payload);
   if (!payload || typeof payload !== "object") return {};
   for (const key of ["data", "result", "company", "companyData", "masterData", "response"]) {
     if (payload[key] && typeof payload[key] === "object" && !Array.isArray(payload[key])) {
@@ -81,16 +180,25 @@ function unwrapPayload(payload) {
 }
 
 function parseDirectors(companyData) {
-  let directors =
-    companyData.directors ||
-    deepGet(companyData, [
-      ["directorData"],
-      ["currentDirectors"],
-      ["masterData", "directors"],
-      ["management", "directors"],
-    ]);
+  let directors = collectObjectsByAncestorAndKey(companyData, "DirectorCurrentMasterBasic", "Director");
 
-  if (!Array.isArray(directors)) return "";
+  if (!directors.length) {
+    const directDirectorArray =
+      companyData.directors ||
+      companyData.Directors ||
+      companyData.currentDirectors ||
+      deepGet(companyData, [
+        ["directorData"],
+        ["currentDirectors"],
+        ["masterData", "directors"],
+        ["management", "directors"],
+      ]);
+    if (Array.isArray(directDirectorArray)) directors = directDirectorArray;
+  }
+
+  if (!directors.length) {
+    directors = collectObjectsWithNameKeys(companyData, ["DirectorName", "directorName", "name", "personName"]);
+  }
 
   const names = [];
   for (const director of directors) {
@@ -101,7 +209,12 @@ function parseDirectors(companyData) {
       name = director.trim();
     } else if (director && typeof director === "object") {
       name = String(
-        director.name || director.directorName || director.fullName || director.personName || "",
+        director.DirectorName ||
+          director.directorName ||
+          director.name ||
+          director.fullName ||
+          director.personName ||
+          "",
       ).trim();
       status = String(
         director.status || director.directorStatus || director.currentStatus || "",
@@ -116,6 +229,35 @@ function parseDirectors(companyData) {
   return [...new Set(names)].join(", ");
 }
 
+function parseContactDetails(companyData) {
+  const email = findFirstValue(companyData, [
+    "CompanyEmail",
+    "EmailID",
+    "EmailId",
+    "Email",
+    "email",
+    "RegisteredEmail",
+  ]);
+  const phone = findFirstValue(companyData, [
+    "ContactNo",
+    "ContactNumber",
+    "MobileNumber",
+    "PhoneNumber",
+    "Telephone",
+    "CompanyPhone",
+    "CompanyContactNo",
+  ]);
+  const website = findFirstValue(companyData, ["CompanyWebSite", "CompanyWebsite", "Website", "WebSite"]);
+
+  return [
+    email ? `Email: ${email}` : "",
+    phone ? `Phone: ${phone}` : "",
+    website ? `Website: ${website}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
 function parseCompanyResponse(cin, payload) {
   const companyData = unwrapPayload(payload);
   const companyName = deepGet(companyData, [
@@ -124,7 +266,7 @@ function parseCompanyResponse(cin, payload) {
     ["masterData", "companyName"],
     ["companyMasterData", "companyName"],
     ["basicDetails", "companyName"],
-  ]);
+  ]) || findFirstValue(companyData, ["CompanyName", "EntityName", "LegalName"]);
   const registeredAddress = deepGet(companyData, [
     ["registeredAddress"],
     ["registeredOfficeAddress"],
@@ -132,6 +274,12 @@ function parseCompanyResponse(cin, payload) {
     ["masterData", "registeredAddress"],
     ["companyMasterData", "registeredAddress"],
     ["basicDetails", "registeredAddress"],
+  ]) || findFirstValue(companyData, [
+    "CompanyFullAddress",
+    "RegisteredAddress",
+    "CompanyAddress",
+    "Address",
+    "PrincipalPlaceofBusiness",
   ]);
   const industrySector = deepGet(companyData, [
     ["industry"],
@@ -141,23 +289,32 @@ function parseCompanyResponse(cin, payload) {
     ["masterData", "industry"],
     ["companyMasterData", "activityDescription"],
     ["basicDetails", "activityDescription"],
+  ]) || findFirstValue(companyData, [
+    "CompanyMcaIndustry",
+    "CompanyMcaIndustryDivision",
+    "Industry",
+    "McaIndustry",
+    "ActivityDescription",
+    "PrincipalBusinessActivity",
   ]);
 
   const result = {
     CIN: cin,
     "Company Name": String(companyName || "").trim(),
-    "Registered Address": String(registeredAddress || "").trim(),
-    "Industry/Sector": String(industrySector || "").trim(),
-    "Director Names": parseDirectors(companyData),
+    "Company Address": String(registeredAddress || "").trim(),
+    Sector: String(industrySector || "").trim(),
+    "Contact Person": parseDirectors(companyData),
+    "Contact Details": parseContactDetails(companyData),
     "Enrichment Status": "Success",
     Error: "",
   };
 
   if (
     !result["Company Name"] &&
-    !result["Registered Address"] &&
-    !result["Industry/Sector"] &&
-    !result["Director Names"]
+    !result["Company Address"] &&
+    !result.Sector &&
+    !result["Contact Person"] &&
+    !result["Contact Details"]
   ) {
     result["Enrichment Status"] = "Completed - no mapped fields found";
   }
@@ -205,14 +362,15 @@ async function callInstaBasic(cin) {
     const response = await fetch(url, request);
     const text = await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
-    return parseCompanyResponse(cin, text ? JSON.parse(text) : {});
+    return parseCompanyResponse(cin, text ? parseJsonMaybe(text) : {});
   } catch (error) {
     return {
       CIN: cin,
       "Company Name": "",
-      "Registered Address": "",
-      "Industry/Sector": "",
-      "Director Names": "",
+      "Company Address": "",
+      Sector: "",
+      "Contact Person": "",
+      "Contact Details": "",
       "Enrichment Status": "Failed",
       Error: error.message,
     };
@@ -245,9 +403,10 @@ function renderTable(rows) {
         <tr>
           <td>${escapeHtml(row.CIN || "")}</td>
           <td>${escapeHtml(row["Company Name"] || "")}</td>
-          <td>${escapeHtml(row["Registered Address"] || "")}</td>
-          <td>${escapeHtml(row["Industry/Sector"] || "")}</td>
-          <td>${escapeHtml(row["Director Names"] || "")}</td>
+          <td>${escapeHtml(row["Contact Details"] || "")}</td>
+          <td>${escapeHtml(row["Contact Person"] || "")}</td>
+          <td>${escapeHtml(row["Company Address"] || "")}</td>
+          <td>${escapeHtml(row.Sector || "")}</td>
           <td>${escapeHtml(row["Enrichment Status"] || "")}</td>
           <td class="${row.Error ? "error" : ""}">${escapeHtml(row.Error || "")}</td>
         </tr>
