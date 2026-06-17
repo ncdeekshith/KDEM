@@ -140,6 +140,26 @@ label {
   font-size: 0.9rem;
 }
 
+.diagnostic-status {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  color: #344054;
+  font-size: 0.86rem;
+}
+
+.diagnostic-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  padding: 10px;
+}
+
+.diagnostic-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
 .panel,
 .run-card,
 .table-section,

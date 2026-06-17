@@ -20,6 +20,8 @@ const els = {
   firebaseConfig: document.querySelector("#firebaseConfig"),
   connectFirebase: document.querySelector("#connectFirebase"),
   firebaseStatus: document.querySelector("#firebaseStatus"),
+  runDiagnostics: document.querySelector("#runDiagnostics"),
+  diagnosticStatus: document.querySelector("#diagnosticStatus"),
   fileInput: document.querySelector("#fileInput"),
   fileName: document.querySelector("#fileName"),
   dropZone: document.querySelector("#dropZone"),
@@ -44,6 +46,11 @@ let enrichedRows = [];
 let firestore = null;
 
 const sleep = (seconds) => new Promise((resolve) => window.setTimeout(resolve, seconds * 1000));
+
+const ENDPOINTS = {
+  publicJson: "https://instafinancials.com/api/InstaBasic/v1/json/CompanyCIN/{cin}/All",
+  instaReports: "https://api.instafinancials.com/InstaReports/v1/InstaBasic/CompanyCIN/{cin}/All",
+};
 
 const normalizeCin = (value) => String(value ?? "").trim().toUpperCase();
 
@@ -454,6 +461,21 @@ function compactDebugValue(value) {
   }
 }
 
+function hasReportData(payload) {
+  const normalized = normalizeResponseTree(payload);
+  if (!normalized || typeof normalized !== "object") return false;
+  return Boolean(
+    firstByNormalizedKey(normalized, ["ReportData"]) ||
+      findFirstValue(normalized, [
+        "CompanyName",
+        "EntityName",
+        "CompanyFullAddress",
+        "RegisteredAddress",
+        "CompanyMcaIndustry",
+      ]),
+  );
+}
+
 function summarizeResponse(payload) {
   const normalized = normalizeResponseTree(payload);
   if (typeof normalized === "string") return normalized.slice(0, 500);
@@ -489,28 +511,17 @@ async function callInstaBasic(cin) {
   const usesTemplate = requestUrl !== endpointTemplate;
   const url = new URL(requestUrl);
 
-  const headers = {
-    Accept: "application/json",
-  };
-  if (authHeaderMode === "react-access-key") headers["react-access-key"] = apiKey;
-  if (authHeaderMode === "user-key") headers["user-key"] = apiKey;
-  if (authHeaderMode === "authorization") headers.Authorization = apiKey;
-  if (authHeaderMode === "bearer") headers.Authorization = `Bearer ${apiKey}`;
-  if (authHeaderMode === "x-api-key") headers["X-API-Key"] = apiKey;
-
-  const request = {
+  const request = buildApiRequest({
+    apiKey,
+    authHeaderMode,
     method,
-    headers,
-  };
+    usesTemplate,
+    cin,
+  });
 
   if (method === "GET" && !usesTemplate) {
     url.searchParams.set("cin", cin);
     url.searchParams.set("fcin", cin);
-  }
-
-  if (method === "POST") {
-    headers["Content-Type"] = "application/json";
-    request.body = usesTemplate ? "{}" : JSON.stringify({ cin, fcin: cin });
   }
 
   try {
@@ -531,6 +542,152 @@ async function callInstaBasic(cin) {
       "Debug Response": "",
     };
   }
+}
+
+function buildApiRequest({ apiKey, authHeaderMode, method, usesTemplate, cin }) {
+  const headers = {
+    Accept: "application/json",
+  };
+
+  if (authHeaderMode === "react-access-key") headers["react-access-key"] = apiKey;
+  if (authHeaderMode === "user-key") headers["user-key"] = apiKey;
+  if (authHeaderMode === "authorization") headers.Authorization = apiKey;
+  if (authHeaderMode === "bearer") headers.Authorization = `Bearer ${apiKey}`;
+  if (authHeaderMode === "x-api-key") headers["X-API-Key"] = apiKey;
+
+  const request = {
+    method,
+    headers,
+  };
+
+  if (method === "POST") {
+    headers["Content-Type"] = "application/json";
+    request.body = usesTemplate ? "{}" : JSON.stringify({ cin, fcin: cin });
+  }
+
+  return request;
+}
+
+async function runApiDiagnostics() {
+  if (!els.apiKey.value.trim()) {
+    alert("Enter your InstaFinancials API key first.");
+    return;
+  }
+
+  const cin = await getFirstInputCin();
+  if (!cin) {
+    alert("Paste a CIN/FCIN or upload a file before running diagnostics.");
+    return;
+  }
+
+  const apiKey = els.apiKey.value.trim();
+  const checks = [
+    {
+      name: "Recommended: Public JSON + user-key",
+      endpoint: ENDPOINTS.publicJson,
+      authHeaderMode: "user-key",
+      method: "GET",
+    },
+    {
+      name: "Public JSON + Authorization",
+      endpoint: ENDPOINTS.publicJson,
+      authHeaderMode: "authorization",
+      method: "GET",
+    },
+    {
+      name: "Public JSON + X-API-Key",
+      endpoint: ENDPOINTS.publicJson,
+      authHeaderMode: "x-api-key",
+      method: "GET",
+    },
+    {
+      name: "InstaReports + user-key",
+      endpoint: ENDPOINTS.instaReports,
+      authHeaderMode: "user-key",
+      method: "GET",
+    },
+    {
+      name: "InstaReports + Authorization",
+      endpoint: ENDPOINTS.instaReports,
+      authHeaderMode: "authorization",
+      method: "GET",
+    },
+  ];
+
+  els.runDiagnostics.disabled = true;
+  els.diagnosticStatus.innerHTML = "<p>Running diagnostics...</p>";
+
+  const results = [];
+  for (const check of checks) {
+    const url = new URL(check.endpoint.replaceAll("{cin}", encodeURIComponent(cin)));
+    const request = buildApiRequest({
+      apiKey,
+      authHeaderMode: check.authHeaderMode,
+      method: check.method,
+      usesTemplate: true,
+      cin,
+    });
+
+    try {
+      const startedAt = performance.now();
+      const response = await fetch(url, request);
+      const text = await response.text();
+      const payload = text ? parseJsonMaybe(text) : {};
+      const normalizedPayload = normalizeResponseTree(payload);
+      const responseStatus = extractResponseStatus(normalizedPayload);
+      const mapped = response.ok && hasReportData(normalizedPayload);
+      results.push({
+        ...check,
+        httpStatus: response.status,
+        ok: response.ok,
+        mapped,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        details: response.ok ? responseStatus || summarizeResponse(normalizedPayload) : text.slice(0, 500),
+      });
+    } catch (error) {
+      results.push({
+        ...check,
+        httpStatus: "Network/CORS",
+        ok: false,
+        mapped: false,
+        elapsedMs: 0,
+        details: error.message,
+      });
+    }
+
+    renderDiagnostics(results);
+  }
+
+  els.runDiagnostics.disabled = false;
+}
+
+async function getFirstInputCin() {
+  const manualCin = rowsFromManualInput()[0]?.CIN;
+  if (manualCin) return manualCin;
+
+  const uploadedRows = await readSelectedFile();
+  if (!uploadedRows.length) return "";
+  const detectedCinColumn = findCinColumn(Object.keys(uploadedRows[0] || {}));
+  return normalizeCin(uploadedRows[0]?.[detectedCinColumn] || "");
+}
+
+function renderDiagnostics(results) {
+  els.diagnosticStatus.innerHTML = results
+    .map((result) => {
+      const verdict = result.mapped
+        ? "Company data returned"
+        : result.ok
+          ? "Authenticated, but no company data"
+          : "Failed";
+      return `
+        <article class="diagnostic-item">
+          <strong>${escapeHtml(result.name)}</strong>
+          <div>${escapeHtml(verdict)} | HTTP ${escapeHtml(result.httpStatus)} | ${escapeHtml(result.elapsedMs)} ms</div>
+          <div>${escapeHtml(result.details || "")}</div>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function rowsFromManualInput() {
@@ -786,6 +943,7 @@ function init() {
 
   wireFileDrop();
   els.startEnrichment.addEventListener("click", startEnrichment);
+  els.runDiagnostics.addEventListener("click", runApiDiagnostics);
   els.endpointPreset.addEventListener("change", () => {
     els.endpointTemplate.value = els.endpointPreset.value;
   });
